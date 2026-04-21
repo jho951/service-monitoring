@@ -72,7 +72,7 @@ Monitoring-server/
 접속 주소는 다음과 같습니다.
 
 - Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
+- Grafana: `http://localhost:3005`
 - Loki: `http://localhost:3100`
 
 Grafana 기본 계정은 다음과 같습니다.
@@ -115,7 +115,7 @@ CD workflow는 위 4개 변수를 `${GITHUB_SHA}` 태그 GHCR 이미지로 expor
 
 - 이미지: `grafana/grafana:11.2.2`
 - 컨테이너 이름: `monitoring-grafana`
-- 기본 포트: `3000`
+- 기본 포트: `3005`
 - 데이터 volume: `grafana-data`
 - provisioning mount:
   - `monitoring/grafana/provisioning`
