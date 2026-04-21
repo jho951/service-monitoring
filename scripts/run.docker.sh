@@ -3,32 +3,40 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COMPOSE_FILE="$PROJECT_ROOT/docker/compose.yml"
 COMPOSE_PROJECT_NAME="monitoring-server"
 ACTION="${1:-up}"
-SERVICE_SHARED_NETWORK="${SERVICE_SHARED_NETWORK:-service-backbone-shared}"
+ENV_NAME="${2:-dev}"
+shift $(( $# > 0 ? 1 : 0 )) || true
+shift $(( $# > 0 ? 1 : 0 )) || true
 
-case "$ACTION" in
-  up|down)
-    ;;
-  *)
-    echo "Usage: ./scripts/run.docker.sh [up|down]"
-    exit 1
-    ;;
-esac
-
-ensure_network() {
-  local network_name="$1"
-  if ! docker network inspect "$network_name" >/dev/null 2>&1; then
-    echo "Creating external network: $network_name"
-    docker network create "$network_name" >/dev/null
-  fi
+usage() {
+  echo "Usage: ./scripts/run.docker.sh [up|down|logs|ps|restart] [dev|prod] [docker compose options]" >&2
 }
 
-if [[ "$ACTION" == "up" ]]; then
-  ensure_network "$SERVICE_SHARED_NETWORK"
-  SERVICE_SHARED_NETWORK="$SERVICE_SHARED_NETWORK" docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" up -d
-else
-  SERVICE_SHARED_NETWORK="$SERVICE_SHARED_NETWORK" docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" down --remove-orphans
+case "$ACTION" in
+  up|down|logs|ps|restart) ;;
+  *) usage; exit 1 ;;
+esac
+
+case "$ENV_NAME" in
+  dev|prod) COMPOSE_FILE="$PROJECT_ROOT/docker/$ENV_NAME/compose.yml" ;;
+  *) usage; exit 1 ;;
+esac
+
+SERVICE_SHARED_NETWORK="${SERVICE_SHARED_NETWORK:-service-backbone-shared}"
+if ! docker network inspect "$SERVICE_SHARED_NETWORK" >/dev/null 2>&1; then
+  echo "Creating external network: $SERVICE_SHARED_NETWORK"
+  docker network create "$SERVICE_SHARED_NETWORK" >/dev/null
 fi
 
+compose() {
+  SERVICE_SHARED_NETWORK="$SERVICE_SHARED_NETWORK" docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
+}
+
+case "$ACTION" in
+  up) compose up -d "$@" ;;
+  down) compose down --remove-orphans "$@" ;;
+  logs) compose logs -f "$@" ;;
+  ps) compose ps "$@" ;;
+  restart) compose down --remove-orphans && compose up -d "$@" ;;
+esac

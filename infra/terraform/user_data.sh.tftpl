@@ -1,0 +1,191 @@
+#!/bin/bash
+set -Eeuo pipefail
+
+exec > >(tee /var/log/${stack_name}-bootstrap.log | logger -t ${stack_name}-bootstrap -s 2>/dev/console) 2>&1
+
+dnf update -y
+dnf install -y docker jq curl
+
+systemctl enable --now docker
+
+if ! docker compose version >/dev/null 2>&1; then
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -fsSL "https://github.com/docker/compose/releases/download/v${docker_compose_version}/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+
+APP_DIR="/opt/${stack_name}"
+mkdir -p "$APP_DIR"/{prometheus,grafana/provisioning/datasources,loki,promtail}
+
+docker network create service-backbone-shared 2>/dev/null || true
+
+cat > "$APP_DIR/prometheus/prometheus.yml" <<'YAML'
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: msa-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+%{ for target in prometheus_scrape_targets ~}
+          - "${target}"
+%{ endfor ~}
+
+  - job_name: redis-exporter
+    static_configs:
+      - targets:
+          - "central-redis-exporter:9121"
+YAML
+
+cat > "$APP_DIR/grafana/provisioning/datasources/prometheus.yml" <<'YAML'
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+YAML
+
+cat > "$APP_DIR/loki/loki-config.yml" <<'YAML'
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+YAML
+
+cat > "$APP_DIR/promtail/promtail-config.yml" <<'YAML'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+YAML
+
+cat > "$APP_DIR/compose.yml" <<YAML
+name: ${stack_name}
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: monitoring-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "${prometheus_port}:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - service-backbone-shared
+      - monitoring-private
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: monitoring-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: "${grafana_admin_user}"
+      GF_SECURITY_ADMIN_PASSWORD: "${grafana_admin_password}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${grafana_port}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: monitoring-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${loki_port}:3100"
+    volumes:
+      - loki-data:/loki
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: monitoring-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-positions:/tmp
+    depends_on:
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  promtail-positions:
+
+networks:
+  monitoring-private:
+    driver: bridge
+  service-backbone-shared:
+    external: true
+YAML
+
+cd "$APP_DIR"
+docker compose up -d

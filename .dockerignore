@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.gradle
+docs
+infra
+README.md
+contract.lock.yml
+docker/dev
+docker/prod

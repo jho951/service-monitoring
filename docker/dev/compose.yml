@@ -1,0 +1,104 @@
+name: monitoring-server
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: monitoring-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - type: bind
+        source: ../../monitoring/prometheus/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+      - type: bind
+        source: ../../monitoring/prometheus/targets
+        target: /etc/prometheus/targets
+        read_only: true
+    networks:
+      - service-shared
+      - monitoring-private
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: monitoring-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - type: bind
+        source: ../../monitoring/grafana/provisioning
+        target: /etc/grafana/provisioning
+        read_only: true
+      - type: bind
+        source: ../../monitoring/grafana/dashboards
+        target: /etc/grafana/dashboards
+        read_only: true
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: monitoring-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - loki-data:/loki
+      - type: bind
+        source: ../../monitoring/loki/loki-config.yml
+        target: /etc/loki/loki-config.yml
+        read_only: true
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: monitoring-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - type: bind
+        source: ../../monitoring/promtail/promtail-config.yml
+        target: /etc/promtail/promtail-config.yml
+        read_only: true
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+      - promtail-positions:/tmp
+    depends_on:
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  promtail-positions:
+
+networks:
+  monitoring-private:
+    driver: bridge
+  service-shared:
+    external: true
+    name: ${SERVICE_SHARED_NETWORK:-service-backbone-shared}

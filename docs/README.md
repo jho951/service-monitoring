@@ -6,3 +6,4 @@
 
 - [Monitoring-server 구조와 운영](./monitoring-server.md)
 
+- [Contract 변경 절차](./contract-change-workflow.md)

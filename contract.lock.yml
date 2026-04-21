@@ -1,0 +1,51 @@
+contract:
+  repo: https://github.com/jho951/service-contract
+  ref: main
+  commit: 12dc214ed7e0c9c2290add6972cd35be13634743
+
+service:
+  name: monitoring-service
+  branch: main
+  role: observability-runtime
+  consumes:
+    - registry/deployment-topology.md
+    - shared/env.md
+    - shared/security.md
+    - shared/terraform.md
+    - shared/ci-cd.md
+    - repositories/monitoring-service/**
+
+validation:
+  contract_lock: true
+  openapi: false
+  schema: false
+  routing: false
+  headers: false
+  errors: false
+  security: true
+
+ci:
+  profile: infra
+  runtime: docker
+  setup: compose
+  test_command: docker compose -f docker/dev/compose.yml config >/tmp/monitoring-dev.yml
+  build_command: docker compose -f docker/prod/compose.yml config >/tmp/monitoring-prod.yml
+  docker: false
+  contract_check: true
+
+cd:
+  profile: ec2-compose
+  target: ec2
+  strategy: docker-compose
+  environments:
+    - dev
+    - prod
+  image_registry: ghcr.io
+  deploy_on: protected_branch
+  health_check: true
+  smoke_test: true
+
+notes:
+  owner: monitoring-service
+  automation_level: guardrail
+  legacy_sync_doc: false

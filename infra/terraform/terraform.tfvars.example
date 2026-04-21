@@ -1,0 +1,30 @@
+aws_region   = "ap-northeast-2"
+project_name = "msa"
+environment  = "prod"
+
+service_name         = "monitor-server"
+service_runtime_name = "monitoring-server"
+
+vpc_cidr            = "10.26.0.0/16"
+public_subnet_cidrs = ["10.26.1.0/24", "10.26.2.0/24"]
+
+# Restrict this to VPN/admin CIDRs before production use.
+ingress_cidrs = ["203.0.113.10/32"]
+
+ssh_ingress_cidrs = []
+ec2_key_name      = ""
+
+prometheus_port = 9090
+grafana_port    = 3000
+loki_port       = 3100
+
+grafana_admin_user     = "admin"
+grafana_admin_password = "replace-with-grafana-admin-password"
+
+prometheus_scrape_targets = [
+  "auth-service:8081",
+  "user-service:8082",
+  "editor-service:8083",
+  "permission-service:8084",
+  "gateway:8080"
+]
