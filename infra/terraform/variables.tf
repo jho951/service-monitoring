@@ -125,7 +125,7 @@ variable "prometheus_scrape_targets" {
     "auth-service:8081",
     "user-service:8082",
     "editor-service:8083",
-    "permission-service:8084",
-    "gateway:8080"
+    "authz-service:8084",
+    "gateway-service:8080"
   ]
 }

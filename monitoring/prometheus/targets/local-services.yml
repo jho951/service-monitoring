@@ -1,40 +1,40 @@
 - targets:
-    - ec2-2.internal:8081
+    - auth-service:8081
   labels:
     service: auth-service
     ec2: ec2-2
     __metrics_path__: /actuator/prometheus
 
 - targets:
-    - ec2-2.internal:8082
+    - user-service:8082
   labels:
     service: user-service
     ec2: ec2-2
     __metrics_path__: /actuator/prometheus
 
 - targets:
-    - ec2-2.internal:8083
+    - editor-service:8083
   labels:
     service: editor-service
     ec2: ec2-2
     __metrics_path__: /actuator/prometheus
 
 - targets:
-    - ec2-2.internal:8084
+    - authz-service:8084
   labels:
     service: authz-service
     ec2: ec2-2
     __metrics_path__: /actuator/prometheus
 
 - targets:
-    - ec2-1.internal:8080
+    - gateway-service:8080
   labels:
     service: gateway-service
     ec2: ec2-1
     __metrics_path__: /actuator/prometheus
 
 - targets:
-    - ec2-3.internal:9121
+    - central-redis-exporter-dev:9121
   labels:
     service: redis-server
     ec2: ec2-3

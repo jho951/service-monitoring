@@ -21,6 +21,10 @@ services:
         source: ../../monitoring/prometheus/targets
         target: /etc/prometheus/targets
         read_only: true
+      - type: bind
+        source: ../../monitoring/prometheus/targets/local-services.yml
+        target: /etc/prometheus/targets/ec2-services.yml
+        read_only: true
     networks:
       - service-shared
       - monitoring-private
