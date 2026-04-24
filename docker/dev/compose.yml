@@ -37,23 +37,47 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GRAFANA_AUTH_MYSQL_HOST: ${GRAFANA_AUTH_MYSQL_HOST:-auth-service-auth-mysql-1:3306}
+      GRAFANA_AUTH_MYSQL_DATABASE: ${GRAFANA_AUTH_MYSQL_DATABASE:-auth_service_db}
+      GRAFANA_AUTH_MYSQL_USER: ${GRAFANA_AUTH_MYSQL_USER:-auth_user}
+      GRAFANA_AUTH_MYSQL_PASSWORD: ${GRAFANA_AUTH_MYSQL_PASSWORD:-auth_password}
+      GRAFANA_USER_MYSQL_HOST: ${GRAFANA_USER_MYSQL_HOST:-user-service-dev-mysql-1:3306}
+      GRAFANA_USER_MYSQL_DATABASE: ${GRAFANA_USER_MYSQL_DATABASE:-user_service}
+      GRAFANA_USER_MYSQL_USER: ${GRAFANA_USER_MYSQL_USER:-user_service}
+      GRAFANA_USER_MYSQL_PASSWORD: ${GRAFANA_USER_MYSQL_PASSWORD:-user_service}
+      GRAFANA_EDITOR_MYSQL_HOST: ${GRAFANA_EDITOR_MYSQL_HOST:-editor-mysql-dev:3306}
+      GRAFANA_EDITOR_MYSQL_DATABASE: ${GRAFANA_EDITOR_MYSQL_DATABASE:-documentsdb}
+      GRAFANA_EDITOR_MYSQL_USER: ${GRAFANA_EDITOR_MYSQL_USER:-documents}
+      GRAFANA_EDITOR_MYSQL_PASSWORD: ${GRAFANA_EDITOR_MYSQL_PASSWORD:-documents}
+      GRAFANA_AUTHZ_MYSQL_HOST: ${GRAFANA_AUTHZ_MYSQL_HOST:-authz-mysql-dev:3306}
+      GRAFANA_AUTHZ_MYSQL_DATABASE: ${GRAFANA_AUTHZ_MYSQL_DATABASE:-authz_service_db}
+      GRAFANA_AUTHZ_MYSQL_USER: ${GRAFANA_AUTHZ_MYSQL_USER:-authz_user}
+      GRAFANA_AUTHZ_MYSQL_PASSWORD: ${GRAFANA_AUTHZ_MYSQL_PASSWORD:-authz_password}
     ports:
       - "${GRAFANA_PORT:-3005}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - type: bind
-        source: ../../monitoring/grafana/provisioning
-        target: /etc/grafana/provisioning
+        source: ./grafana/provisioning/datasources
+        target: /etc/grafana/provisioning/datasources
         read_only: true
       - type: bind
         source: ../../monitoring/grafana/dashboards
         target: /etc/grafana/dashboards
+        read_only: true
+      - type: bind
+        source: ../../monitoring/grafana/provisioning/dashboards
+        target: /etc/grafana/provisioning/dashboards
         read_only: true
     depends_on:
       - prometheus
       - loki
     networks:
       - monitoring-private
+      - auth-private
+      - user-private
+      - documents-private
+      - authz-private
     restart: unless-stopped
 
   loki:
@@ -106,3 +130,15 @@ networks:
   service-shared:
     external: true
     name: ${SERVICE_SHARED_NETWORK:-service-backbone-shared}
+  auth-private:
+    external: true
+    name: ${AUTH_PRIVATE_NETWORK:-auth-service_auth-private}
+  user-private:
+    external: true
+    name: ${USER_PRIVATE_NETWORK:-user-service-dev_user-private}
+  documents-private:
+    external: true
+    name: ${EDITOR_PRIVATE_NETWORK:-editor-service_documents-private}
+  authz-private:
+    external: true
+    name: ${AUTHZ_PRIVATE_NETWORK:-authz-service_authz-private}

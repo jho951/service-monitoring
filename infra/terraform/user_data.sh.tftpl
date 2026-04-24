@@ -16,94 +16,48 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 APP_DIR="/opt/${stack_name}"
-mkdir -p "$APP_DIR"/{prometheus,grafana/provisioning/datasources,loki,promtail}
+mkdir -p "$APP_DIR"/{prometheus/targets,grafana/provisioning/datasources,grafana/provisioning/dashboards,grafana/dashboards,loki,promtail}
 
 docker network create service-backbone-shared 2>/dev/null || true
 
 cat > "$APP_DIR/prometheus/prometheus.yml" <<'YAML'
-global:
-  scrape_interval: 15s
+${prometheus_config}
+YAML
 
-scrape_configs:
-  - job_name: msa-services
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets:
-%{ for target in prometheus_scrape_targets ~}
-          - "${target}"
-%{ endfor ~}
-
-  - job_name: redis-exporter
-    static_configs:
-      - targets:
-          - "central-redis-exporter:9121"
+cat > "$APP_DIR/prometheus/targets/ec2-services.yml" <<'YAML'
+${prometheus_targets_ec2}
 YAML
 
 cat > "$APP_DIR/grafana/provisioning/datasources/prometheus.yml" <<'YAML'
-apiVersion: 1
-
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
+${grafana_datasources}
 YAML
 
+cat > "$APP_DIR/grafana/provisioning/dashboards/dashboards.yml" <<'YAML'
+${grafana_dashboard_provider}
+YAML
+
+cat > "$APP_DIR/grafana/dashboards/msa-overview.json" <<'JSON'
+${grafana_dashboard_msa_overview}
+JSON
+
+cat > "$APP_DIR/grafana/dashboards/msa-service-drilldown.json" <<'JSON'
+${grafana_dashboard_service_detail}
+JSON
+
+cat > "$APP_DIR/grafana/dashboards/gateway-edge-overview.json" <<'JSON'
+${grafana_dashboard_gateway_edge}
+JSON
+
+cat > "$APP_DIR/grafana/dashboards/redis-overview.json" <<'JSON'
+${grafana_dashboard_redis_overview}
+JSON
+
 cat > "$APP_DIR/loki/loki-config.yml" <<'YAML'
-auth_enabled: false
-
-server:
-  http_listen_port: 3100
-
-common:
-  path_prefix: /loki
-  storage:
-    filesystem:
-      chunks_directory: /loki/chunks
-      rules_directory: /loki/rules
-  replication_factor: 1
-  ring:
-    kvstore:
-      store: inmemory
-
-schema_config:
-  configs:
-    - from: 2024-01-01
-      store: tsdb
-      object_store: filesystem
-      schema: v13
-      index:
-        prefix: index_
-        period: 24h
+${loki_config}
 YAML
 
 cat > "$APP_DIR/promtail/promtail-config.yml" <<'YAML'
-server:
-  http_listen_port: 9080
-  grpc_listen_port: 0
-
-positions:
-  filename: /tmp/positions.yaml
-
-clients:
-  - url: http://loki:3100/loki/api/v1/push
-
-scrape_configs:
-  - job_name: docker
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-        refresh_interval: 5s
-    relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/(.*)'
-        target_label: 'container'
-      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
-        target_label: 'service'
+${promtail_config}
 YAML
 
 cat > "$APP_DIR/compose.yml" <<YAML
@@ -121,6 +75,7 @@ services:
     volumes:
       - prometheus-data:/prometheus
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/targets:/etc/prometheus/targets:ro
     networks:
       - service-backbone-shared
       - monitoring-private
@@ -138,6 +93,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
     depends_on:
       - prometheus
       - loki

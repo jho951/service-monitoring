@@ -42,7 +42,7 @@
           "legendFormat": "{{service}}"
         }
       ],
-      "title": "Application Availability",
+      "title": "Selected Service Availability",
       "type": "timeseries"
     },
     {
@@ -79,7 +79,7 @@
           "legendFormat": "{{service}}"
         }
       ],
-      "title": "HTTP Request Rate",
+      "title": "Selected Service Request Rate",
       "type": "timeseries"
     },
     {
@@ -112,11 +112,11 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate(http_server_requests_seconds_count{metrics_scope=\"application\",service=~\"$service\",status=~\"5..\"}[5m]))",
-          "legendFormat": "{{service}}"
+          "expr": "topk(10, sum by (service, uri) (rate(http_server_requests_seconds_count{metrics_scope=\"application\",service=~\"$service\"}[5m])))",
+          "legendFormat": "{{service}} {{uri}}"
         }
       ],
-      "title": "HTTP 5xx Rate",
+      "title": "Top URI Throughput",
       "type": "timeseries"
     },
     {
@@ -126,7 +126,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -149,11 +149,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_server_requests_seconds_bucket{metrics_scope=\"application\",service=~\"$service\"}[5m])))",
-          "legendFormat": "{{service}}"
+          "expr": "topk(10, sum by (service, uri) (rate(http_server_requests_seconds_count{metrics_scope=\"application\",service=~\"$service\",status=~\"5..\"}[5m])))",
+          "legendFormat": "{{service}} {{uri}}"
         }
       ],
-      "title": "HTTP P95 Latency",
+      "title": "Top URI 5xx Rate",
       "type": "timeseries"
     },
     {
@@ -163,7 +163,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -186,11 +186,48 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (jvm_memory_used_bytes{metrics_scope=\"application\",service=~\"$service\",area=\"heap\"})",
+          "expr": "topk(10, histogram_quantile(0.95, sum by (le, service, uri) (rate(http_server_requests_seconds_bucket{metrics_scope=\"application\",service=~\"$service\"}[5m]))))",
+          "legendFormat": "{{service}} {{uri}}"
+        }
+      ],
+      "title": "Top URI P95 Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (jvm_threads_live_threads{metrics_scope=\"application\",service=~\"$service\"})",
           "legendFormat": "{{service}}"
         }
       ],
-      "title": "JVM Heap Used",
+      "title": "JVM Live Threads",
       "type": "timeseries"
     },
     {
@@ -207,10 +244,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 16
+        "x": 0,
+        "y": 24
       },
-      "id": 6,
+      "id": 7,
       "options": {
         "legend": {
           "displayMode": "list",
@@ -244,43 +281,6 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 24
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (service) (hikaricp_connections_active{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "title": "DB Active Connections",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
         "y": 24
       },
@@ -297,11 +297,15 @@
       },
       "targets": [
         {
+          "expr": "sum by (service) (hikaricp_connections_active{metrics_scope=\"application\",service=~\"$service\"})",
+          "legendFormat": "{{service}} active"
+        },
+        {
           "expr": "sum by (service) (hikaricp_connections_pending{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
+          "legendFormat": "{{service}} pending"
         }
       ],
-      "title": "DB Pending Connections",
+      "title": "DB Connection Pressure",
       "type": "timeseries"
     },
     {
@@ -317,7 +321,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 32
       },
@@ -335,47 +339,14 @@
       "targets": [
         {
           "expr": "sum(increase(social_link_requests_total{metrics_scope=\"application\",service=~\"$service\"}[15m]))",
-          "legendFormat": "user-service"
-        }
-      ],
-      "title": "User Social Link Requests (15m)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
+          "legendFormat": "social link requests"
         },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
         {
-          "expr": "sum(rate(redis_commands_processed_total{metrics_scope=\"exporter\"}[5m]))",
-          "legendFormat": "redis"
+          "expr": "sum(increase(social_link_conflicts_total{metrics_scope=\"application\",service=~\"$service\"}[15m]))",
+          "legendFormat": "social link conflicts"
         }
       ],
-      "title": "Redis Commands / sec",
+      "title": "Optional Domain Metrics",
       "type": "timeseries"
     }
   ],
@@ -383,8 +354,7 @@
   "schemaVersion": 39,
   "tags": [
     "msa",
-    "overview",
-    "spring-boot"
+    "drilldown"
   ],
   "templating": {
     "list": [
@@ -424,8 +394,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "MSA Overview",
-  "uid": "msa-overview",
-  "version": 2,
+  "title": "MSA Service Drilldown",
+  "uid": "msa-service-drilldown",
+  "version": 1,
   "weekStart": ""
 }

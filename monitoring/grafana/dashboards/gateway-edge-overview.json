@@ -38,11 +38,11 @@
       },
       "targets": [
         {
-          "expr": "max by (service) (up{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
+          "expr": "max(gateway_up{metrics_scope=\"custom\"})",
+          "legendFormat": "gateway"
         }
       ],
-      "title": "Application Availability",
+      "title": "Gateway Custom Metrics Availability",
       "type": "timeseries"
     },
     {
@@ -52,7 +52,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -75,11 +75,11 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate(http_server_requests_seconds_count{metrics_scope=\"application\",service=~\"$service\"}[5m]))",
-          "legendFormat": "{{service}}"
+          "expr": "max(gateway_http_requests_active{metrics_scope=\"custom\"})",
+          "legendFormat": "in-flight"
         }
       ],
-      "title": "HTTP Request Rate",
+      "title": "Gateway In-Flight Requests",
       "type": "timeseries"
     },
     {
@@ -112,11 +112,11 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (rate(http_server_requests_seconds_count{metrics_scope=\"application\",service=~\"$service\",status=~\"5..\"}[5m]))",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (upstream) (rate(gateway_http_requests_total{metrics_scope=\"custom\",upstream=~\"$upstream\"}[5m]))",
+          "legendFormat": "{{upstream}}"
         }
       ],
-      "title": "HTTP 5xx Rate",
+      "title": "Gateway Request Rate By Upstream",
       "type": "timeseries"
     },
     {
@@ -126,7 +126,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -149,11 +149,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_server_requests_seconds_bucket{metrics_scope=\"application\",service=~\"$service\"}[5m])))",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (auth_outcome) (rate(gateway_http_requests_total{metrics_scope=\"custom\",upstream=~\"$upstream\"}[5m]))",
+          "legendFormat": "{{auth_outcome}}"
         }
       ],
-      "title": "HTTP P95 Latency",
+      "title": "Gateway Request Rate By Auth Outcome",
       "type": "timeseries"
     },
     {
@@ -163,7 +163,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -186,11 +186,11 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (jvm_memory_used_bytes{metrics_scope=\"application\",service=~\"$service\",area=\"heap\"})",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (upstream) (rate(gateway_http_requests_total{metrics_scope=\"custom\",upstream=~\"$upstream\",status=~\"5..\"}[5m]))",
+          "legendFormat": "{{upstream}}"
         }
       ],
-      "title": "JVM Heap Used",
+      "title": "Gateway 5xx Rate By Upstream",
       "type": "timeseries"
     },
     {
@@ -200,7 +200,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -223,11 +223,11 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (process_cpu_usage{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (upstream) (rate(gateway_http_request_duration_seconds_sum{metrics_scope=\"custom\",upstream=~\"$upstream\"}[5m])) / clamp_min(sum by (upstream) (rate(gateway_http_request_duration_seconds_count{metrics_scope=\"custom\",upstream=~\"$upstream\"}[5m])), 1)",
+          "legendFormat": "{{upstream}}"
         }
       ],
-      "title": "Process CPU Usage",
+      "title": "Gateway Average Duration By Upstream",
       "type": "timeseries"
     },
     {
@@ -237,13 +237,13 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 24
       },
@@ -260,131 +260,20 @@
       },
       "targets": [
         {
-          "expr": "sum by (service) (hikaricp_connections_active{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
+          "expr": "sum by (status) (rate(gateway_http_requests_total{metrics_scope=\"custom\",upstream=~\"$upstream\"}[5m]))",
+          "legendFormat": "{{status}}"
         }
       ],
-      "title": "DB Active Connections",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 24
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (service) (hikaricp_connections_pending{metrics_scope=\"application\",service=~\"$service\"})",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "title": "DB Pending Connections",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 32
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(social_link_requests_total{metrics_scope=\"application\",service=~\"$service\"}[15m]))",
-          "legendFormat": "user-service"
-        }
-      ],
-      "title": "User Social Link Requests (15m)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 32
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(redis_commands_processed_total{metrics_scope=\"exporter\"}[5m]))",
-          "legendFormat": "redis"
-        }
-      ],
-      "title": "Redis Commands / sec",
+      "title": "Gateway Request Rate By Status",
       "type": "timeseries"
     }
   ],
   "refresh": "15s",
   "schemaVersion": 39,
   "tags": [
-    "msa",
-    "overview",
-    "spring-boot"
+    "gateway",
+    "edge",
+    "msa"
   ],
   "templating": {
     "list": [
@@ -399,16 +288,16 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(up{metrics_scope=\"application\"}, service)",
+        "definition": "label_values(gateway_http_requests_total{metrics_scope=\"custom\"}, upstream)",
         "hide": 0,
         "includeAll": true,
-        "label": "Service",
+        "label": "Upstream",
         "multi": true,
-        "name": "service",
+        "name": "upstream",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(up{metrics_scope=\"application\"}, service)",
+          "query": "label_values(gateway_http_requests_total{metrics_scope=\"custom\"}, upstream)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -424,8 +313,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "MSA Overview",
-  "uid": "msa-overview",
-  "version": 2,
+  "title": "Gateway Edge Overview",
+  "uid": "gateway-edge-overview",
+  "version": 1,
   "weekStart": ""
 }

@@ -179,14 +179,23 @@ resource "aws_instance" "monitoring" {
 
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    stack_name                = var.service_runtime_name
-    prometheus_port           = var.prometheus_port
-    grafana_port              = var.grafana_port
-    loki_port                 = var.loki_port
-    grafana_admin_user        = var.grafana_admin_user
-    grafana_admin_password    = var.grafana_admin_password
-    docker_compose_version    = var.docker_compose_version
-    prometheus_scrape_targets = var.prometheus_scrape_targets
+    stack_name                       = var.service_runtime_name
+    prometheus_port                  = var.prometheus_port
+    grafana_port                     = var.grafana_port
+    loki_port                        = var.loki_port
+    grafana_admin_user               = var.grafana_admin_user
+    grafana_admin_password           = var.grafana_admin_password
+    docker_compose_version           = var.docker_compose_version
+    prometheus_config                = file("${path.module}/../../monitoring/prometheus/prometheus.yml")
+    prometheus_targets_ec2           = file("${path.module}/../../monitoring/prometheus/targets/ec2-services.yml")
+    grafana_datasources              = file("${path.module}/../../monitoring/grafana/provisioning/datasources/prometheus.yml")
+    grafana_dashboard_provider       = file("${path.module}/../../monitoring/grafana/provisioning/dashboards/dashboards.yml")
+    grafana_dashboard_msa_overview   = file("${path.module}/../../monitoring/grafana/dashboards/spring-boot-overview.json")
+    grafana_dashboard_service_detail = file("${path.module}/../../monitoring/grafana/dashboards/msa-service-drilldown.json")
+    grafana_dashboard_gateway_edge   = file("${path.module}/../../monitoring/grafana/dashboards/gateway-edge-overview.json")
+    grafana_dashboard_redis_overview = file("${path.module}/../../monitoring/grafana/dashboards/redis-overview.json")
+    loki_config                      = file("${path.module}/../../monitoring/loki/loki-config.yml")
+    promtail_config                  = file("${path.module}/../../monitoring/promtail/promtail-config.yml")
   })
 
   root_block_device {

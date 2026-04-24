@@ -3,6 +3,7 @@
   labels:
     service: auth-service
     ec2: ec2-2
+    metrics_scope: application
     __metrics_path__: /actuator/prometheus
 
 - targets:
@@ -10,6 +11,7 @@
   labels:
     service: user-service
     ec2: ec2-2
+    metrics_scope: application
     __metrics_path__: /actuator/prometheus
 
 - targets:
@@ -17,6 +19,7 @@
   labels:
     service: editor-service
     ec2: ec2-2
+    metrics_scope: application
     __metrics_path__: /actuator/prometheus
 
 - targets:
@@ -24,6 +27,7 @@
   labels:
     service: authz-service
     ec2: ec2-2
+    metrics_scope: application
     __metrics_path__: /actuator/prometheus
 
 - targets:
@@ -31,11 +35,21 @@
   labels:
     service: gateway-service
     ec2: ec2-1
+    metrics_scope: application
     __metrics_path__: /actuator/prometheus
+
+- targets:
+    - ec2-1.internal:8080
+  labels:
+    service: gateway-service
+    ec2: ec2-1
+    metrics_scope: custom
+    __metrics_path__: /metrics
 
 - targets:
     - ec2-3.internal:9121
   labels:
     service: redis-server
     ec2: ec2-3
+    metrics_scope: exporter
     __metrics_path__: /metrics

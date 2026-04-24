@@ -21,7 +21,8 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
+  id-token: write
 
 concurrency:
   group: cd-${{ github.workflow }}-${{ github.ref }}
@@ -31,10 +32,7 @@ env:
   CONTRACT_REPO: https://github.com/jho951/service-contract
   SERVICE_NAME: monitoring-service
   CD_PROFILE: ec2-compose
-  PROMETHEUS_IMAGE_URI: ghcr.io/${{ github.repository }}-prometheus
-  GRAFANA_IMAGE_URI: ghcr.io/${{ github.repository }}-grafana
-  LOKI_IMAGE_URI: ghcr.io/${{ github.repository }}-loki
-  PROMTAIL_IMAGE_URI: ghcr.io/${{ github.repository }}-promtail
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
   IMAGE_BUILD_COMMAND: |
     docker build \
       -f docker/prometheus/Dockerfile \
@@ -56,7 +54,7 @@ env:
       -t "${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}" \
       .
     docker push "${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}"
-    if [ "${GITHUB_REF_NAME}" = "main" ]; then
+    if [ "${PUBLISH_LATEST}" = "true" ]; then
       docker tag "${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}" "${PROMETHEUS_IMAGE_URI}:latest"
       docker push "${PROMETHEUS_IMAGE_URI}:latest"
       docker tag "${GRAFANA_IMAGE_URI}:${GITHUB_SHA}" "${GRAFANA_IMAGE_URI}:latest"
@@ -68,7 +66,7 @@ env:
     fi
   COMPOSE_CONFIG_COMMAND: |
     docker compose -f docker/dev/compose.yml config >/tmp/monitoring-dev.yml
-    docker compose -f docker/prod/compose.yml config >/tmp/monitoring-prod.yml
+    PROMETHEUS_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-prometheus:test GRAFANA_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-grafana:test LOKI_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-loki:test PROMTAIL_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-promtail:test docker compose -f docker/prod/compose.yml config >/tmp/monitoring-prod.yml
   HEALTH_URL: http://127.0.0.1:3000/api/health
   READY_URL: http://127.0.0.1:3000/api/health
   GITHUB_ACTOR: ${{ github.actor }}
@@ -120,28 +118,50 @@ jobs:
     name: Image
     runs-on: ubuntu-latest
     needs: deploy-gate
+    outputs:
+      prometheus_image_uri: ${{ steps.resolve.outputs.prometheus_image_uri }}
+      grafana_image_uri: ${{ steps.resolve.outputs.grafana_image_uri }}
+      loki_image_uri: ${{ steps.resolve.outputs.loki_image_uri }}
+      promtail_image_uri: ${{ steps.resolve.outputs.promtail_image_uri }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
-        if: ${{ env.IMAGE_BUILD_COMMAND != 'skip' }}
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image targets
+        id: resolve
+        shell: bash
+        env:
+          DEPLOY_ENVIRONMENT: ${{ needs.deploy-gate.outputs.deploy_environment }}
+        run: |
+          set -euo pipefail
+          registry="${{ steps.login-ecr.outputs.registry }}"
+          prefix="${DEPLOY_ENVIRONMENT}-${SERVICE_NAME}"
+          echo "prometheus_image_uri=${registry}/${prefix}-prometheus" >> "$GITHUB_OUTPUT"
+          echo "grafana_image_uri=${registry}/${prefix}-grafana" >> "$GITHUB_OUTPUT"
+          echo "loki_image_uri=${registry}/${prefix}-loki" >> "$GITHUB_OUTPUT"
+          echo "promtail_image_uri=${registry}/${prefix}-promtail" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
-        if: ${{ env.IMAGE_BUILD_COMMAND != 'skip' }}
         shell: bash
+        env:
+          PROMETHEUS_IMAGE_URI: ${{ steps.resolve.outputs.prometheus_image_uri }}
+          GRAFANA_IMAGE_URI: ${{ steps.resolve.outputs.grafana_image_uri }}
+          LOKI_IMAGE_URI: ${{ steps.resolve.outputs.loki_image_uri }}
+          PROMTAIL_IMAGE_URI: ${{ steps.resolve.outputs.promtail_image_uri }}
+          PUBLISH_LATEST: ${{ github.ref_name == 'main' || github.ref_name == 'master' }}
         run: |
           set -euo pipefail
           ${{ env.IMAGE_BUILD_COMMAND }}
-
-      - name: Skip image publish
-        if: ${{ env.IMAGE_BUILD_COMMAND == 'skip' }}
-        run: echo "No Docker image is produced for ${{ env.SERVICE_NAME }}."
 
   deploy:
     name: Deploy
@@ -160,12 +180,13 @@ jobs:
 
       - name: Deploy
         shell: bash
+        env:
+          PROMETHEUS_IMAGE: ${{ needs.image.outputs.prometheus_image_uri }}:${{ github.sha }}
+          GRAFANA_IMAGE: ${{ needs.image.outputs.grafana_image_uri }}:${{ github.sha }}
+          LOKI_IMAGE: ${{ needs.image.outputs.loki_image_uri }}:${{ github.sha }}
+          PROMTAIL_IMAGE: ${{ needs.image.outputs.promtail_image_uri }}:${{ github.sha }}
         run: |
           set -euo pipefail
-          export PROMETHEUS_IMAGE="${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}"
-          export GRAFANA_IMAGE="${GRAFANA_IMAGE_URI}:${GITHUB_SHA}"
-          export LOKI_IMAGE="${LOKI_IMAGE_URI}:${GITHUB_SHA}"
-          export PROMTAIL_IMAGE="${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}"
           echo "Service: ${SERVICE_NAME}"
           echo "Profile: ${CD_PROFILE}"
           echo "Environment: ${{ needs.deploy-gate.outputs.deploy_environment }}"

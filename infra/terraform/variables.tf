@@ -19,7 +19,7 @@ variable "environment" {
 variable "service_name" {
   description = "Logical service name from service-contract."
   type        = string
-  default     = "monitor-server"
+  default     = "monitoring-service"
 }
 
 variable "service_runtime_name" {
@@ -91,7 +91,7 @@ variable "prometheus_port" {
 variable "grafana_port" {
   description = "Grafana host port."
   type        = number
-  default     = 3000
+  default     = 3005
 }
 
 variable "loki_port" {
@@ -116,16 +116,4 @@ variable "docker_compose_version" {
   description = "Docker Compose plugin version installed by user data when it is missing."
   type        = string
   default     = "2.29.7"
-}
-
-variable "prometheus_scrape_targets" {
-  description = "Spring Boot actuator prometheus targets reachable from the monitoring host."
-  type        = list(string)
-  default = [
-    "auth-service:8081",
-    "user-service:8082",
-    "editor-service:8083",
-    "authz-service:8084",
-    "gateway-service:8080"
-  ]
 }

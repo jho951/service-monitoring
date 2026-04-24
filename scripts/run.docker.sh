@@ -34,9 +34,20 @@ compose() {
 }
 
 case "$ACTION" in
-  up) compose up -d "$@" ;;
+  up)
+    if [[ "$ENV_NAME" == "prod" ]]; then
+      compose pull "$@"
+    fi
+    compose up -d "$@"
+    ;;
   down) compose down --remove-orphans "$@" ;;
   logs) compose logs -f "$@" ;;
   ps) compose ps "$@" ;;
-  restart) compose down --remove-orphans && compose up -d "$@" ;;
+  restart)
+    compose down --remove-orphans
+    if [[ "$ENV_NAME" == "prod" ]]; then
+      compose pull "$@"
+    fi
+    compose up -d "$@"
+    ;;
 esac

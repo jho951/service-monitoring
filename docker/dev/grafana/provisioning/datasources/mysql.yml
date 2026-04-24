@@ -1,0 +1,69 @@
+apiVersion: 1
+
+deleteDatasources:
+  - name: mysql
+
+datasources:
+  - name: Auth MySQL
+    uid: mysql-auth
+    type: mysql
+    url: ${GRAFANA_AUTH_MYSQL_HOST}
+    user: ${GRAFANA_AUTH_MYSQL_USER}
+    jsonData:
+      database: ${GRAFANA_AUTH_MYSQL_DATABASE}
+      tlsAuth: false
+      tlsAuthWithCACert: false
+      maxOpenConns: 20
+      maxIdleConns: 20
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${GRAFANA_AUTH_MYSQL_PASSWORD}
+    editable: true
+
+  - name: User MySQL
+    uid: mysql-user
+    type: mysql
+    url: ${GRAFANA_USER_MYSQL_HOST}
+    user: ${GRAFANA_USER_MYSQL_USER}
+    jsonData:
+      database: ${GRAFANA_USER_MYSQL_DATABASE}
+      tlsAuth: false
+      tlsAuthWithCACert: false
+      maxOpenConns: 20
+      maxIdleConns: 20
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${GRAFANA_USER_MYSQL_PASSWORD}
+    editable: true
+
+  - name: Editor MySQL
+    uid: mysql-editor
+    type: mysql
+    url: ${GRAFANA_EDITOR_MYSQL_HOST}
+    user: ${GRAFANA_EDITOR_MYSQL_USER}
+    jsonData:
+      database: ${GRAFANA_EDITOR_MYSQL_DATABASE}
+      tlsAuth: false
+      tlsAuthWithCACert: false
+      maxOpenConns: 20
+      maxIdleConns: 20
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${GRAFANA_EDITOR_MYSQL_PASSWORD}
+    editable: true
+
+  - name: Authz MySQL
+    uid: mysql-authz
+    type: mysql
+    url: ${GRAFANA_AUTHZ_MYSQL_HOST}
+    user: ${GRAFANA_AUTHZ_MYSQL_USER}
+    jsonData:
+      database: ${GRAFANA_AUTHZ_MYSQL_DATABASE}
+      tlsAuth: false
+      tlsAuthWithCACert: false
+      maxOpenConns: 20
+      maxIdleConns: 20
+      connMaxLifetime: 14400
+    secureJsonData:
+      password: ${GRAFANA_AUTHZ_MYSQL_PASSWORD}
+    editable: true

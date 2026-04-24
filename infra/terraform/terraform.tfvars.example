@@ -2,7 +2,7 @@ aws_region   = "ap-northeast-2"
 project_name = "msa"
 environment  = "prod"
 
-service_name         = "monitor-server"
+service_name         = "monitoring-service"
 service_runtime_name = "monitoring-server"
 
 vpc_cidr            = "10.26.0.0/16"
@@ -15,16 +15,11 @@ ssh_ingress_cidrs = []
 ec2_key_name      = ""
 
 prometheus_port = 9090
-grafana_port    = 3000
+grafana_port    = 3005
 loki_port       = 3100
 
 grafana_admin_user     = "admin"
 grafana_admin_password = "replace-with-grafana-admin-password"
 
-prometheus_scrape_targets = [
-  "auth-service:8081",
-  "user-service:8082",
-  "editor-service:8083",
-  "authz-service:8084",
-  "gateway-service:8080"
-]
+# Update monitoring/prometheus/targets/ec2-services.yml with the real private DNS/IPs
+# before running terraform apply.
