@@ -33,26 +33,22 @@ env:
   SERVICE_NAME: monitoring-service
   CD_PROFILE: ec2-compose
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+  HEALTH_URL: ${{ vars.HEALTH_URL || '' }}
+  READY_URL: ${{ vars.READY_URL || '' }}
+  DEPLOY_COMMAND: ${{ secrets.DEPLOY_COMMAND }}
+  HAS_EC2_DEPLOY_TARGET: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_SSH_KEY != '' }}
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || '' }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER || 'ec2-user' }}
+  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+  DEPLOY_BUNDLE_DIR: ${{ vars.DEPLOY_BUNDLE_DIR || '/opt/deploy' }}
   IMAGE_BUILD_COMMAND: |
-    docker build \
-      -f docker/prometheus/Dockerfile \
-      -t "${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}" \
-      .
+    docker build -f docker/prometheus/Dockerfile -t "${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}" .
     docker push "${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}"
-    docker build \
-      -f docker/grafana/Dockerfile \
-      -t "${GRAFANA_IMAGE_URI}:${GITHUB_SHA}" \
-      .
+    docker build -f docker/grafana/Dockerfile -t "${GRAFANA_IMAGE_URI}:${GITHUB_SHA}" .
     docker push "${GRAFANA_IMAGE_URI}:${GITHUB_SHA}"
-    docker build \
-      -f docker/loki/Dockerfile \
-      -t "${LOKI_IMAGE_URI}:${GITHUB_SHA}" \
-      .
+    docker build -f docker/loki/Dockerfile -t "${LOKI_IMAGE_URI}:${GITHUB_SHA}" .
     docker push "${LOKI_IMAGE_URI}:${GITHUB_SHA}"
-    docker build \
-      -f docker/promtail/Dockerfile \
-      -t "${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}" \
-      .
+    docker build -f docker/promtail/Dockerfile -t "${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}" .
     docker push "${PROMTAIL_IMAGE_URI}:${GITHUB_SHA}"
     if [ "${PUBLISH_LATEST}" = "true" ]; then
       docker tag "${PROMETHEUS_IMAGE_URI}:${GITHUB_SHA}" "${PROMETHEUS_IMAGE_URI}:latest"
@@ -67,12 +63,6 @@ env:
   COMPOSE_CONFIG_COMMAND: |
     docker compose -f docker/dev/compose.yml config >/tmp/monitoring-dev.yml
     PROMETHEUS_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-prometheus:test GRAFANA_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-grafana:test LOKI_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-loki:test PROMTAIL_IMAGE=123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/prod-monitoring-service-promtail:test docker compose -f docker/prod/compose.yml config >/tmp/monitoring-prod.yml
-  HEALTH_URL: http://127.0.0.1:3000/api/health
-  READY_URL: http://127.0.0.1:3000/api/health
-  GITHUB_ACTOR: ${{ github.actor }}
-  GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || secrets.GH_TOKEN || secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN || github.token }}
-  GH_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN || secrets.GH_TOKEN || secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN || github.token }}
-  DEPLOY_COMMAND: ${{ secrets.DEPLOY_COMMAND }}
 
 jobs:
   deploy-gate:
@@ -123,6 +113,7 @@ jobs:
       grafana_image_uri: ${{ steps.resolve.outputs.grafana_image_uri }}
       loki_image_uri: ${{ steps.resolve.outputs.loki_image_uri }}
       promtail_image_uri: ${{ steps.resolve.outputs.promtail_image_uri }}
+      registry: ${{ steps.resolve.outputs.registry }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -146,10 +137,23 @@ jobs:
           set -euo pipefail
           registry="${{ steps.login-ecr.outputs.registry }}"
           prefix="${DEPLOY_ENVIRONMENT}-${SERVICE_NAME}"
+          echo "registry=${registry}" >> "$GITHUB_OUTPUT"
           echo "prometheus_image_uri=${registry}/${prefix}-prometheus" >> "$GITHUB_OUTPUT"
           echo "grafana_image_uri=${registry}/${prefix}-grafana" >> "$GITHUB_OUTPUT"
           echo "loki_image_uri=${registry}/${prefix}-loki" >> "$GITHUB_OUTPUT"
           echo "promtail_image_uri=${registry}/${prefix}-promtail" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure ECR repositories
+        shell: bash
+        env:
+          DEPLOY_ENVIRONMENT: ${{ needs.deploy-gate.outputs.deploy_environment }}
+        run: |
+          set -euo pipefail
+          for suffix in prometheus grafana loki promtail; do
+            repo="${DEPLOY_ENVIRONMENT}-${SERVICE_NAME}-${suffix}"
+            aws ecr describe-repositories --region "${AWS_REGION}" --repository-names "${repo}" >/dev/null 2>&1 || \
+              aws ecr create-repository --region "${AWS_REGION}" --repository-name "${repo}" >/dev/null
+          done
 
       - name: Build and push image
         shell: bash
@@ -174,11 +178,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Compose config
+      - name: Validate compose config
         shell: bash
         run: ${{ env.COMPOSE_CONFIG_COMMAND }}
 
-      - name: Deploy
+      - name: Setup SSH agent
+        if: ${{ env.HAS_EC2_DEPLOY_TARGET == 'true' }}
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add deploy host to known_hosts
+        if: ${{ env.HAS_EC2_DEPLOY_TARGET == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        if: ${{ env.HAS_EC2_DEPLOY_TARGET == 'true' }}
+        shell: bash
+        env:
+          PROMETHEUS_IMAGE: ${{ needs.image.outputs.prometheus_image_uri }}:${{ github.sha }}
+          GRAFANA_IMAGE: ${{ needs.image.outputs.grafana_image_uri }}:${{ github.sha }}
+          LOKI_IMAGE: ${{ needs.image.outputs.loki_image_uri }}:${{ github.sha }}
+          PROMTAIL_IMAGE: ${{ needs.image.outputs.promtail_image_uri }}:${{ github.sha }}
+          REGISTRY: ${{ needs.image.outputs.registry }}
+        run: |
+          set -euo pipefail
+          ssh -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "AWS_REGION='${AWS_REGION}' REGISTRY='${REGISTRY}' PROMETHEUS_IMAGE='${PROMETHEUS_IMAGE}' GRAFANA_IMAGE='${GRAFANA_IMAGE}' LOKI_IMAGE='${LOKI_IMAGE}' PROMTAIL_IMAGE='${PROMTAIL_IMAGE}' DEPLOY_BUNDLE_DIR='${DEPLOY_BUNDLE_DIR}' bash -se" <<'EOF'
+          set -euo pipefail
+          aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"
+          cd "${DEPLOY_BUNDLE_DIR}"
+          test -f .env.backend
+          sed -i "s|^PROMETHEUS_IMAGE=.*$|PROMETHEUS_IMAGE=${PROMETHEUS_IMAGE}|" .env.backend
+          sed -i "s|^GRAFANA_IMAGE=.*$|GRAFANA_IMAGE=${GRAFANA_IMAGE}|" .env.backend
+          sed -i "s|^LOKI_IMAGE=.*$|LOKI_IMAGE=${LOKI_IMAGE}|" .env.backend
+          sed -i "s|^PROMTAIL_IMAGE=.*$|PROMTAIL_IMAGE=${PROMTAIL_IMAGE}|" .env.backend
+          ./scripts/deploy-stack.sh up
+          EOF
+
+      - name: Fallback deploy command
+        if: ${{ env.HAS_EC2_DEPLOY_TARGET != 'true' && env.DEPLOY_COMMAND != '' }}
         shell: bash
         env:
           PROMETHEUS_IMAGE: ${{ needs.image.outputs.prometheus_image_uri }}:${{ github.sha }}
@@ -187,18 +230,12 @@ jobs:
           PROMTAIL_IMAGE: ${{ needs.image.outputs.promtail_image_uri }}:${{ github.sha }}
         run: |
           set -euo pipefail
-          echo "Service: ${SERVICE_NAME}"
-          echo "Profile: ${CD_PROFILE}"
-          echo "Environment: ${{ needs.deploy-gate.outputs.deploy_environment }}"
-          echo "Prometheus image: ${PROMETHEUS_IMAGE}"
-          echo "Grafana image: ${GRAFANA_IMAGE}"
-          echo "Loki image: ${LOKI_IMAGE}"
-          echo "Promtail image: ${PROMTAIL_IMAGE}"
-          if [ -n "${DEPLOY_COMMAND}" ]; then
-            eval "${DEPLOY_COMMAND}"
-          else
-            echo "DEPLOY_COMMAND secret is not configured; image publish and compose validation completed."
-          fi
+          eval "${DEPLOY_COMMAND}"
+
+      - name: Skip deploy
+        if: ${{ env.HAS_EC2_DEPLOY_TARGET != 'true' && env.DEPLOY_COMMAND == '' }}
+        shell: bash
+        run: echo "No EC2 deploy target or DEPLOY_COMMAND configured; image publish and compose validation completed."
 
   health-check:
     name: Health Check
@@ -209,14 +246,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${DEPLOY_COMMAND}" ]; then
-            echo "DEPLOY_COMMAND is not configured; skipping remote health check."
+          if [ "${HAS_EC2_DEPLOY_TARGET}" != "true" ] && [ -z "${DEPLOY_COMMAND}" ]; then
+            echo "Skipping remote health check."
             exit 0
           fi
-          case "${HEALTH_URL}" in
-            http*) curl --fail --retry 12 --retry-delay 5 "${HEALTH_URL}" ;;
-            *) echo "Runtime health command: ${HEALTH_URL}" ;;
-          esac
+          if [ -z "${HEALTH_URL}" ]; then
+            echo "Skipping remote health check."
+            exit 0
+          fi
+          curl --fail --retry 12 --retry-delay 5 "${HEALTH_URL}"
 
   smoke-test:
     name: Smoke Test
@@ -227,11 +265,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${DEPLOY_COMMAND}" ]; then
-            echo "DEPLOY_COMMAND is not configured; skipping remote smoke test."
+          if [ "${HAS_EC2_DEPLOY_TARGET}" != "true" ] && [ -z "${DEPLOY_COMMAND}" ]; then
+            echo "Skipping remote smoke test."
             exit 0
           fi
-          case "${READY_URL}" in
-            http*) curl --fail --retry 12 --retry-delay 5 "${READY_URL}" ;;
-            *) echo "Runtime smoke command: ${READY_URL}" ;;
-          esac
+          if [ -z "${READY_URL}" ]; then
+            echo "Skipping remote smoke test."
+            exit 0
+          fi
+          curl --fail --retry 12 --retry-delay 5 "${READY_URL}"
