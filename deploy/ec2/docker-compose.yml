@@ -1,0 +1,84 @@
+name: monitoring-service-ec2
+
+services:
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:?PROMETHEUS_IMAGE is required}
+    pull_policy: always
+    container_name: monitoring-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    ports:
+      - "${PROMETHEUS_BIND_HOST:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - prometheus-data:/prometheus
+    networks:
+      - service-shared
+      - monitoring-private
+    restart: unless-stopped
+
+  grafana:
+    image: ${GRAFANA_IMAGE:?GRAFANA_IMAGE is required}
+    pull_policy: always
+    container_name: monitoring-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_BIND_HOST:-127.0.0.1}:${GRAFANA_PORT:-3005}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  loki:
+    image: ${LOKI_IMAGE:?LOKI_IMAGE is required}
+    pull_policy: always
+    container_name: monitoring-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_BIND_HOST:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+  promtail:
+    image: ${PROMTAIL_IMAGE:?PROMTAIL_IMAGE is required}
+    pull_policy: always
+    container_name: monitoring-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+      - promtail-positions:/tmp
+    depends_on:
+      - loki
+    networks:
+      - monitoring-private
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  promtail-positions:
+
+networks:
+  monitoring-private:
+    driver: bridge
+  service-shared:
+    external: true
+    name: ${SERVICE_SHARED_NETWORK:-service-backbone-shared}
