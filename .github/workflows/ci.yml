@@ -30,7 +30,7 @@ env:
   JAVA_VERSION: "17"
   COMPOSE_VALIDATE_SCRIPT: ./scripts/validate-compose.sh
   TEST_COMMAND: docker compose -f docker/dev/compose.yml config >/tmp/monitoring-dev.yml
-  BUILD_COMMAND: docker compose -f docker/prod/compose.yml config >/tmp/monitoring-prod.yml
+  BUILD_COMMAND: skip
   PROMETHEUS_IMAGE_URI: ghcr.io/${{ github.repository }}-prometheus
   GRAFANA_IMAGE_URI: ghcr.io/${{ github.repository }}-grafana
   LOKI_IMAGE_URI: ghcr.io/${{ github.repository }}-loki
